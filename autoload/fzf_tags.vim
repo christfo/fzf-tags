@@ -18,6 +18,28 @@ let s:preview_cmd = [
   \ '--highlight-line {3} {2}"'
   \ ]
 
+let s:default_fzf_tags_prompt = ' 🔎 '
+let s:fzf_tags_prompt = get(g:, 'fzf_tags_prompt', s:default_fzf_tags_prompt)
+
+let s:default_fzf_layout = { 'window': { 'width': 0.9, 'height': 0.6 } }
+let s:fzf_layout = get(g:, 'fzf_layout', s:default_fzf_layout)
+
+let s:actions = {
+  \ 'ctrl-t': 'tab split',
+  \ 'ctrl-x': 'split',
+  \ 'ctrl-v': 'vsplit' }
+
+function! fzf_tags#SelectCommand(identifier)
+  let identifier = empty(a:identifier) ? s:tagstack_head() : a:identifier
+  if empty(identifier)
+    echohl Error
+    echo "Tag stack empty"
+    echohl None
+  else
+    call fzf_tags#Find(identifier)
+  endif
+endfunction
+
 function! fzf_tags#FindCommand(identifier)
   return fzf_tags#Find(empty(a:identifier) ? expand('<cword>') : a:identifier)
 endfunction
@@ -44,6 +66,16 @@ function! fzf_tags#Find(identifier)
   endif
 endfunction
 
+
+function! s:tagstack_head()
+  let stack = gettagstack()
+  return stack.length != 0 ? stack.items[-1].tagname : ""
+endfunction
+
+function! s:tagsearch_string(identifier)
+  return '^' . a:identifier . '$'
+endfunction
+
 function! s:strip_leading_bangs(identifier)
   if (a:identifier[0] !=# '!')
     return a:identifier
@@ -53,8 +85,9 @@ function! s:strip_leading_bangs(identifier)
 endfunction
 
 function! s:source_lines(identifier)
+  let tagstring = s:tagsearch_string(a:identifier)
   let relevant_fields = map(
-  \   taglist('^' . a:identifier . '$', expand('%:p')),
+  \   taglist(tagstring, expand('%:p')),
   \   function('s:tag_to_string')
   \ )
   return map(s:align_lists(relevant_fields), 'join(v:val, " ")')
@@ -65,12 +98,12 @@ function! s:tag_to_string(index, tag_dict)
   if has_key(a:tag_dict, 'filename')
     call add(components, s:magenta(a:tag_dict['filename']))
   endif
-  if has_key(a:tag_dict, 'line')
-    call add(components, s:green(a:tag_dict['line']))
-    if (a:tag_dict['line'] > 8) 
-      call add(components, s:green(a:tag_dict['line'] - 8))
+  if has_key(a:tag_dict, 'cmd')
+    call add(components, s:green(a:tag_dict['cmd']))
+    if (a:tag_dict['cmd'] > 8)
+      call add(components, s:green(a:tag_dict['cmd'] - 8))
     else
-      call add(components, s:green(a:tag_dict['line']))
+      call add(components, s:green(a:tag_dict['cmd']))
     endif
   endif
   return components
@@ -102,7 +135,7 @@ function! s:sink(identifier, selection)
 
   " Go to tag!
   let l:count = split(selected_text)[0]
-  execute l:count . 'tag' a:identifier
+  execute l:count . 'tag /' . s:tagsearch_string(a:identifier)
 endfunction
 
 function! s:green(s)
